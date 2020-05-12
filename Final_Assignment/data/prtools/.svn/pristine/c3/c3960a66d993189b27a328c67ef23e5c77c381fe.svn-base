@@ -1,0 +1,69 @@
+%FNNC Fast Nearest Neighbor Classifier
+%
+%   W = A*FNNC
+%   W = FNNC(A)
+%
+% DESCRIPTION
+% This is a fast version of KNNC([],1), especially useful for many-class
+% problems. For reasons of speed it will NOT return proper confidences on
+% evaluation. D = B*W will be a 0/1 dataset. Classification results are
+% otherwise identical to KNNC([],1).
+%
+% SEE ALSO
+% MAPPINGS, DATASETS, KNNC
+
+% Copyright: R.P.W. Duin, r.p.w.duin@37steps.com
+
+function out = fnnc(a,v)
+
+  if nargin < 1 || isempty(a)
+    out = prmapping(mfilename);
+    out = setname(out,'1-NN');
+  elseif nargin == 1 && isdataset(a)
+    out = trained_classifier(a,{a});
+  elseif ismapping(v)
+    trainset = getdata(v,1);
+    nlab = getnlab(trainset);
+    L = indnn(a,trainset);
+    out = zeros(size(a,1),getsize(trainset,3));
+    for i=1:size(a,1)
+      out(i,nlab(L(i))) = 1;
+    end
+    out = setdat(a,out,v);
+  else
+    error('Illegal input')
+  end
+
+return
+
+
+%INDNN Find indices of nearest neighbors
+%
+%   IND = INDNN(TEST,TRAIN)
+%   IND = TEST*INDNN([],TRAIN) for batch processing
+%
+% TRAIN is either a dataset used for training or a trained classifier
+% (KNNC or NMC) containing a dataset used during training.
+
+function ind = indnn(a,trainset)
+
+  if ismapping(trainset) % possible knnc
+    if strcmp(getmapping_file(trainset),'knn_map')
+      trainset = getdata(trainset,1);
+    elseif strcmp(getmapping_file(trainset),'normal_map')
+      trainset = getdata(trainset,'mean');
+    else
+      error('Unsupported data type')
+    end
+  end
+  if isempty(a)
+    batchsize = ceil(prmemory/(2*size(trainset,1)));
+    ind = prmapping('indnn','fixed',trainset);
+    ind = setbatch(ind,1,batchsize);
+  else
+    [~,ind] = min(+a*proxm(trainset),[],2);
+  end
+
+return
+  
+  

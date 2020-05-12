@@ -1,0 +1,152 @@
+%PARZENDDC Parzen density based classifier for dissimilarity data
+% 
+%  [W,H] = PARZENDDC(D)
+%  W     = PARZENDDC(D,H)
+% 
+% INPUT
+%   D   Dissimilarity dataset
+%   H   Smoothing parameters (optional; default: estimated from D)
+%
+% OUTPUT
+%  W    Trained Parzen classifier
+%  H    Smoothing parameters, estimated from the data
+%
+% DESCRIPTION
+%
+% SEE ALSO
+% DATASETS, MAPPINGS, PARZEND_MAP
+ 
+% Copyright: R.P.W. Duin, r.p.w.duin@prtools.org
+% Faculty EWI, Delft University of Technology
+% P.O. Box 5031, 2600 GA Delft, The Netherlands
+
+function [W,h] = parzenddc(d,h)
+  
+  prtrace(mfilename);
+  
+  if nargin < 2, h = []; end
+  
+  % No input arguments: return an untrained mapping.
+  if nargin == 0 | isempty(d)
+    W = prmapping(mfilename,h); 
+    W = setname(W,'Parzen DisRep Classifier');
+    return; 
+  end
+  
+  if nargin < 2 | isempty(h);
+    %prwarning(5,'Smoothing parameters not specified, estimated from the data.');
+    %error('Smoothing parameter estimation not yet implemented')
+    h = [];
+  end
+
+  islabtype(d,'crisp','soft');
+  isvaldfile(d,2,2); % at least 2 objects per class, 2 classes
+  d = testdatasize(d);
+  d = testdatasize(d,'objects');
+  
+  [m,k,c] = getsize(d);
+  nlab = getnlab(d);
+
+  if ~isempty(h)       % Take user settings for smoothing parameters.
+    
+    nlab = getnlab(d);
+    if length(h) == 1
+      hh = repmat(h,m,1);
+    elseif length(h) == c
+      hh = zeros(m,1);
+      for j=1:c
+        J = find(nlab==j);
+        hh(J) = h(j);
+      end
+    else
+      error('Smoothing parameter has wrong size')
+    end
+
+  else   % Estimate smoothing parameters (copied and adapted from parzenc)
+  
+    %error('Not yet implemented')
+
+    % compute all object distances
+    D = +d;
+    dim = intrdim(D);
+    hinit = max(D(:)); % for sure a too high value
+    D = D.^2 + diag(inf*ones(1,m));
+    % find object weights q
+    q = classsizes(d);
+  
+    % find for each object its class freqency
+    of = q(nlab);
+  
+    % find object weights q
+    p = getprior(d);
+    %a = setprior(a,p);
+    q = p(nlab)./q(nlab);
+  
+    % initialise
+    h = hinit;
+    %h = 2.5
+    L = -inf;
+    Ln = 0;
+    z = 0.01^(1/dim); % initial step size
+
+    % iterate
+  
+    len1 = prprogress([],'parzenddc: error optimization smoothing parameter: ');
+    len2 = prprogress([],' %6.4f  %6.4f ',0,0);
+	  iter = 0;
+    prwaitbar(100,'parzenc: Optimizing smoothing parameter',m > 100);
+    while abs(Ln-L) > 0.0001 & z < 1
+      % In L we store the best performance estimate found so far.
+      % Ln is the actual performance (for the actual h)
+      % If Ln > L we improve the bound L, and so we rest it.
+		  iter = iter+1;
+		  prwaitbar(100,100-100*exp(-iter/10));
+      if Ln > L, L = Ln; end
+
+      r = -0.5/(h^2);
+      F = q(ones(1,m),:)'.*exp(D*r);           % density contributions
+      FS = sum(F)*((m-1)/m); IFS = find(FS>0); % joint density distribution
+      if islabtype(d,'crisp');
+        G = sum(F .* (nlab(:,ones(1,m)) == nlab(:,ones(1,m))'));
+      else
+        G = zeros(1,m);
+        for j=1:c
+          G = G + sum(F .* (d.targets(:,j) * d.targets(:,j)'));
+        end
+      end
+      G = G.*(of-1)./of;                       % true-class densities
+      % performance estimate, neglect zeros
+    
+      en = max(p)*ones(1,m);
+      en(IFS) = (G(IFS))./FS(IFS);
+      Ln = exp(sum(log(en+realmin))/m);
+  
+      closemess([],len2);
+      len2 = prprogress([],' %6.4f  %6.4f ',h,Ln);
+
+      if Ln < L            % compute next estimate
+        z = sqrt(z);       % adjust stepsize up (recall: 0 < z < 1)
+        h = h / z;         % if we don't improve, increase h (approach h_opt from below)
+      else
+        z = z*z;
+        h = h * z;         % if we improve, decrease h (approach h_opt from above)
+      end
+      %disp([Ln,L,z,h])
+    end
+    closemess([],len1+len2);
+    hh = h*ones(m,1);
+    prwaitbar(0);
+
+  end
+
+  par.objects = [1:m]';
+  par.prior   = getprior(d);
+  par.nlab    = getnlab(d);
+  par.smoothpar = hh;
+  par.weights = ones(m,1);
+    
+  W = prmapping('parzend_map','trained',par,getlablist(d),k,c);
+  W = setname(W,'Parzen DisRep Classifier');
+  W = setcost(W,d);
+
+return;
