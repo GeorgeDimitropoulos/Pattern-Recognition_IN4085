@@ -3,4 +3,4 @@ This repository contains the final project that we implemented in MATLAB under t
 
 # Hand Written Digit Classification
 
-• Development and evaluation of different classifiers in MATLAB in order to decrease the classification error in the automate classification of individual digits used for cheque purposes
+• Development and evaluation of different Machine Learning classifiers in MATLAB in order to decrease the classification error in the automate classification of individual digits used for cheque purposes
